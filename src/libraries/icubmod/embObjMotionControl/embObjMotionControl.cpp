@@ -690,21 +690,6 @@ bool embObjMotionControl::fromConfig_Step2(yarp::os::Searchable &config)
             return false;
 
 
-        //_newtonsToSensor not depends more on joint. Since now we use float number to change torque values with firmware, we can use micro Nm in order to have a good sensitivity.
-        for (i = 0; i < _njoints; i++)
-        {
-            measConvFactors.newtonsToSensor[i] = 1000000.0f; // conversion from Nm into microNm
-        
-            measConvFactors.bemf2raw[i] = measConvFactors.newtonsToSensor[i] / measConvFactors.angleToEncoder[i];
-            if (_tpids->out_PidUnits == yarp::dev::PidOutputUnitsEnum::DUTYCYCLE_PWM_PERCENT)
-            {   measConvFactors.ktau2raw[i] = measConvFactors.dutycycleToPWM[i] / measConvFactors.newtonsToSensor[i];  }
-            else if (_tpids->out_PidUnits == yarp::dev::PidOutputUnitsEnum::RAW_MACHINE_UNITS)
-            {   measConvFactors.ktau2raw[i] = 1.0 / measConvFactors.newtonsToSensor[i];  }
-            else 
-            {   yError() << "Invalid ktau units"; return false;  }
-        }
-
-
         //VALE: i have to parse GeneralMecGroup after parsing jointsetcfg, because inside generalmec group there is useMotorSpeedFbk that needs jointset info.
 
         if(!_mcparser->parseGearboxValues(config, _gearbox_M2J, _gearbox_E2J))
@@ -765,6 +750,23 @@ bool embObjMotionControl::fromConfig_Step2(yarp::os::Searchable &config)
         updatedJointsetsCfgWithControlInfo();
         }
 
+        //_newtonsToSensor not depends more on joint. Since now we use float number to change torque values with firmware, we can use micro Nm in order to have a good sensitivity.
+        for (i = 0; i < _njoints; i++)
+        {
+            measConvFactors.newtonsToSensor[i] = 1000000.0f; // conversion from Nm into microNm
+        
+            measConvFactors.bemf2raw[i] = measConvFactors.newtonsToSensor[i] / measConvFactors.angleToEncoder[i];
+            if (_tpids->out_PidUnits == yarp::dev::PidOutputUnitsEnum::DUTYCYCLE_PWM_PERCENT)
+            {   yDebug() << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^"; measConvFactors.ktau2raw[i] = measConvFactors.dutycycleToPWM[i] / measConvFactors.newtonsToSensor[i];  }
+            else if (_tpids->out_PidUnits == yarp::dev::PidOutputUnitsEnum::RAW_MACHINE_UNITS)
+            {   measConvFactors.ktau2raw[i] = 1.0 / measConvFactors.newtonsToSensor[i];  }
+            else 
+            {   yError() << "Invalid ktau units"; return false;  }
+            
+            yDebug() << "-----------------------------------" << i << measConvFactors.ktau2raw[i] <<  measConvFactors.dutycycleToPWM[i]  << measConvFactors.newtonsToSensor[i];
+            printf("%.8f %.8f %.8f\n",  measConvFactors.ktau2raw[i] ,  measConvFactors.dutycycleToPWM[i]  , measConvFactors.newtonsToSensor[i]);
+        }
+        
     ///////////////INIT INTERFACES
     _measureConverter = new ControlBoardHelper(_njoints, _axisMap, measConvFactors.angleToEncoder, NULL, measConvFactors.newtonsToSensor, measConvFactors.ampsToSensor, nullptr, measConvFactors.dutycycleToPWM , measConvFactors.bemf2raw, measConvFactors.ktau2raw);
     _measureConverter->set_pid_conversion_units(PidControlTypeEnum::VOCAB_PIDTYPE_POSITION, _ppids->fbk_PidUnits, _ppids->out_PidUnits);

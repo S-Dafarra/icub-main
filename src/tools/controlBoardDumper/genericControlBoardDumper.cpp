@@ -1,6 +1,6 @@
 // -*- mode:C++; tab-width:4; c-basic-offset:4; indent-tabs-mode:nil -*-
 
-/* 
+/*
  * Copyright (C) 2010 RobotCub Consortium, European Commission FP6 Project IST-004370
  * Author: Francesco Nori
  * email:  francesco.nori@iit.it
@@ -54,7 +54,7 @@ bool GetEncs::getData(double *e)
   if (iencs)
     {
       while(!iencs->getEncoders(e))
-	fprintf(stderr, "Getting bad encoders! \n");
+        fprintf(stderr, "Getting bad encoders! \n");
       return 1;
     }
   else
@@ -176,7 +176,7 @@ bool GetTrqs::getData(double *e)
   //fprintf(stderr, "Entering getTrqs\n");
   if (itrq)
     {
-	  itrq->getTorques(e);
+      itrq->getTorques(e);
       return 1;
     }
   else
@@ -365,11 +365,27 @@ bool GetMotPwm::getData(double *e)
     {
         return 0;
     }
-    
+
     bool ret = true;
     for(int j=0; j<n_joint_part; j++)
     {
         ret &=iamp->getPWM(j, &e[j]);
     }
     return ret;
+}
+
+void GetPosPidErrLims::setInterface(IPidControl *i)
+{
+  ipid = i;
+}
+
+bool GetPosPidErrLims::getData(double *e)
+{
+  if (ipid)
+    {
+      ipid->getPidErrorLimits(VOCAB_PIDTYPE_POSITION, e);
+      return true;
+    }
+  else
+    return false;
 }

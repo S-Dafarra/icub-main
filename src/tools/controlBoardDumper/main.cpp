@@ -1,6 +1,6 @@
 // -*- mode:C++; tab-width:4; c-basic-offset:4; indent-tabs-mode:nil -*-
 
-/* 
+/*
  * Copyright (C) 2010 RobotCub Consortium, European Commission FP6 Project IST-004370
  * Author: Francesco Nori
  * email:  francesco.nori@iit.it
@@ -23,7 +23,7 @@
  *
  * \defgroup icub_controlBoardDumper controlBoardDumper
  *
- * A basic module for collecting data (position, current, 
+ * A basic module for collecting data (position, current,
  * applied voltage, pid errors, ...) from a controlBoard
  * and sending them trough a yarp port. These data can then
  * be dumped to a file using yarpdatadumper. Time stamp is
@@ -33,9 +33,9 @@
  * Therefore, collected data needs to be available to the controlBoard.
  * When using the iCub canbus protocol this is not necessary guaranteed
  * for all data: data are available only if the corresponding broadcast
- * is enabled. This can be easily done by seeting the proper entry in 
+ * is enabled. This can be easily done by seeting the proper entry in
  * the controlBoard configuration file (e.g. icub_right_arm_safe.ini):
- *      
+ *
  * <ul>
  * <li> broadcast_pos: if 1 enables getEncoders (joint position)
  * <li> broadcast_vel_acc: if 1 enables getEncoderSpeeds (joint velocity)
@@ -46,20 +46,20 @@
  * </ul>
  *
  * \section intro_sec Description
- * 
+ *
  * Data from a control board can be easily accessed trough
- * suitable interfaces (IPositionControl, IAmplifierControl, 
+ * suitable interfaces (IPositionControl, IAmplifierControl,
  * IPidControl ...) and corresponding functions (getEncoders,
  * getCurrrents, getOutputs, ...). The module (controlBoardDumper)
- * accesses all these data and make them available on the 
+ * accesses all these data and make them available on the
  * network opening suitable yarp ports. The data are collected
- * at a fixed frequency by a suitable thread whose frequency can 
- * be changed. 
+ * at a fixed frequency by a suitable thread whose frequency can
+ * be changed.
  *
  * \section libraries_sec Libraries
  * Yarp libraries.
- * 
- * 
+ *
+ *
  * \section parameters_sec Parameters
  * The module uses the ResourceFinder class as a way to retrieve its
  * own configuration. In particular, the default config file is
@@ -83,10 +83,10 @@
  * logToFile                     //if present, this options creates a log file for each data port
  *
  * \endcode
- * 
+ *
  * If no such file can be found, the application is started
  * with the default parameters. The first parameter ('robot' with
- * default value 'icub') specifies the robot name. The second 
+ * default value 'icub') specifies the robot name. The second
  * parameter ('part' with default 'head') specifies the used part.
  * The third parameter ('rate' with default '500') specifies the
  * acquisition rate.
@@ -100,15 +100,21 @@
  * <li> getOutputs              (voltage (PWM) given to the motor)
  * <li> getCurrents             (current given to the motor)
  * <li> getTorques              (joint torques, if available)
- * <li> getPosPidReferences     (last position referenece)
+ * <li> getPosPidReferences     (last position reference)
+ * <li> getPosPidErrorLimits    (position PID error limit)
  * <li> getTrqPidReferences     (last torque reference)
  * <li> getRotorPositions       (hires rotor position, if debug interface is available)
  * <li> getRotorSpeeds          (hires rotor velocity, if debug interface is available)
  * <li> getRotorAccelerations   (hires rotor acceleration, if debug interface is available)
  * <li> getControlModes         (joint control mode)
  * <li> getInteractionModes     (joint interaction mode)
+ * <li> getMotorEncoders        (motor encoder position)
+ * <li> getMotorSpeeds          (motor velocity)
+ * <li> getMotorAccelerations   (motor acceleration)
+ * <li> getTemperatures         (motor temperature)
+ * <li> getMotorsPwm            (motor PWM)
  * </ul>
- * Other data can be easily added by modyfing the classes in the 
+ * Other data can be easily added by modyfing the classes in the
  * file genericControlBoardDumper.cpp which contains a class named
  * GetData with a method getData which can be used to instantiate
  * a thread controlBoardDumper which does not depend on the specific
@@ -195,7 +201,7 @@
 #include "dumperThread.h"
 #include <string>
 
-#define NUMBER_OF_AVAILABLE_STANDARD_DATA_TO_DUMP 17
+#define NUMBER_OF_AVAILABLE_STANDARD_DATA_TO_DUMP 18
 #define NUMBER_OF_AVAILABLE_DEBUG_DATA_TO_DUMP 3
 
 
@@ -320,6 +326,7 @@ int getDataToDump(ResourceFinder &rf, std::string *listOfData, int n, bool *need
     availableDataToDump[14] = "getMotorAccelerations";
     availableDataToDump[15] = "getTemperatures";
     availableDataToDump[16] = "getMotorsPwm";
+    availableDataToDump[17] = "getPosPidErrorLimits";
     // debug
     availableDebugDataToDump[0] = "getRotorPositions";
     availableDebugDataToDump[1] = "getRotorSpeeds";
@@ -390,7 +397,7 @@ private:
     int rate;
     int nJoints;
     int* thetaMap;
-    std::string *dataToDump;  
+    std::string *dataToDump;
     int nData;
 
     boardDumperThread *myDumper;
@@ -415,6 +422,7 @@ private:
     GetPosErrs myGetPosErrs;
     GetPidRefs myGetPidRefs;
     GetOuts myGetOuts;
+    GetPosPidErrLims myGetPosPidErrLims;
     //amp
     IAmplifierControl *iamp;
     GetCurrs myGetCurrs;
@@ -432,7 +440,7 @@ private:
 
 public:
     DumpModule() : useDebugClient(false)
-    { 
+    {
         istmp=0;
         ienc=0;
         imotenc=0;
@@ -446,13 +454,13 @@ public:
     virtual bool configure(ResourceFinder &rf)
     {
         // get command line options
-        if (!rf.check("robot") || !rf.check("part")) 
+        if (!rf.check("robot") || !rf.check("part"))
         {
             printf("Missing either --robot or --part options. Quitting!\n");
             return false;
         }
 
-        std::string dumpername; 
+        std::string dumpername;
         // get dumepr name
         if (rf.check("name"))
         {
@@ -495,12 +503,12 @@ public:
         yInfo("Selected rate is: %d\n", rate);
         yInfo("Data selected to be dumped are:\n");
         for (int i = 0; i < nData; i++)
-            yInfo("\t%s \n", dataToDump[i].c_str());    
+            yInfo("\t%s \n", dataToDump[i].c_str());
 
         //open remote control board
         ddBoardOptions.put("device", "remote_controlboard");
         ddDebugOptions.put("device", "debugInterfaceClient");
-    
+
         std::string localPortName = name;
         std::string localDebugPortName = name;
         localPortName = localPortName + dumpername;
@@ -520,8 +528,8 @@ public:
 
         remoteDebugPortName = remotePortName + "/debug";
         ddDebugOptions.put("remote", remoteDebugPortName);
-    
-        // create a device 
+
+        // create a device
         ddBoard.open(ddBoardOptions);
         if (!ddBoard.isValid()) {
             printf("Device not available.\n");
@@ -744,7 +752,7 @@ public:
                             }
                             else
                                 yError("Problems getting the time stamp interfaces \n");
-                               
+
                             myDumper[i].setGetter(&myGetCurrs);
                         }
                 }
@@ -763,7 +771,7 @@ public:
                             }
                             else
                                 yError("Problems getting the time stamp interfaces \n");
-                               
+
                             myDumper[i].setGetter(&myGetTrqs);
                         }
                 }
@@ -782,7 +790,7 @@ public:
                             }
                             else
                                 yError("Problems getting the time stamp interfaces \n");
-                               
+
                             myDumper[i].setGetter(&myGetTrqErrs);
                         }
                 }
@@ -882,6 +890,24 @@ public:
                             myDumper[i].setGetter(&myGetMotPwm);
                         }
                 }
+                else if (dataToDump[i] == "getPosPidErrorLimits")
+                {
+                    if (ddBoard.view(ipid))
+                    {
+                        yInfo("Initializing a getPosPidErrorLimits thread\n");
+                        myDumper[i].setDevice(&ddBoard, &ddDebug, rate, portPrefix, dataToDump[i], logToFile);
+                        myDumper[i].setThetaMap(thetaMap, nJoints);
+                        myGetPosPidErrLims.setInterface(ipid);
+                        if (ddBoard.view(istmp))
+                        {
+                            yInfo("getPosPidErrorLimits::The time stamp initalization interfaces was successful! \n");
+                            myGetPosPidErrLims.setStamp(istmp);
+                        }
+                        else
+                            yError("Problems getting the time stamp interfaces \n");
+                        myDumper[i].setGetter(&myGetPosPidErrLims);
+                    }
+                }
             }
         Time::delay(1);
         for (int i = 0; i < nData; i++)
@@ -921,7 +947,7 @@ public:
 };
 
 
-int main(int argc, char *argv[]) 
+int main(int argc, char *argv[])
 {
     Network yarp;
 
@@ -933,7 +959,7 @@ int main(int argc, char *argv[])
     rf.setDefault("robot","icub");
     rf.setDefault("rate","500");
     rf.setDefault("joints","(0)");
-    rf.setDefault("dataToDump","(getEncoders getEncoderSpeeds getEncoderAccelerations getPositionErrors getOutputs getCurrents getTorques getTorqueErrors)");    
+    rf.setDefault("dataToDump","(getEncoders getEncoderSpeeds getEncoderAccelerations getPositionErrors getOutputs getCurrents getTorques getTorqueErrors)");
     rf.configure(argc,argv);
 
     if (rf.check("help"))
@@ -960,8 +986,12 @@ int main(int argc, char *argv[])
         printf (" getControlModes         (joint control mode)\n");
         printf (" getInteractionModes     (joint interaction mode)\n");
         printf (" getTemperatures         (motor temperatures)\n");
+        printf (" getPosPidErrorLimits    (Position Pid error limits)\n");
+        printf (" getRotorPositions       (hires rotor position, if debug interface is available)\n");
+        printf (" getRotorSpeeds          (hires rotor velocity, if debug interface is available)\n");
+        printf (" getRotorAccelerations   (hires rotor acceleration, if debug interface is available)\n");
         printf ("\n3) controlBoardDumper --robot icub --part left_arm --rate 10  --joints \"(0 1 2)\" --dataToDumpAll\n");
-        printf ("   All data from the controlBoarWrapper will be dumped, including data from the debugInterface (getRotorxxx).\n");
+        printf ("   All data from the controlBoarWrapper will be dumped, except the data from the debugInterface (getRotorxxx).\n");
         printf ("\n --logToFile can be used to create log files storing the data\n\n");
 
         return 0;

@@ -258,7 +258,7 @@ bool BcbBattery::getBatteryTemperature(double &temperature)
 {
     //yError("Not yet implemented");
     temperature = std::nan("");
-    return false;
+    return true;
 }
 
 bool BcbBattery::getBatteryInfo(string &info)
